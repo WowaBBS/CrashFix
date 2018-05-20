@@ -60,9 +60,9 @@ const char* CConfig::GetFileName()
 }
 
 
-char* CConfig::getProfileString(const char* param_name, char* buf, int buf_len)
+char* CConfig::getProfileString(const char* param_name, char* buf, int buf_len, char* default_val)
 {
-	char* szRet = NULL;
+	char* szRet = default_val;
 	char szLine[4096]="";
 	char* s = NULL;
 	char* c = NULL;

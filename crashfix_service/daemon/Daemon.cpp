@@ -18,10 +18,10 @@
 
 // Static variables
 #ifdef _WIN32
-#define SERVICE_NAME             L"CrashFix"
-#define SERVICE_DISPLAY_NAME     L"CrashFix Service"
-#define SERVICE_DESC             L"Processes crash report files"
-#define SERVICE_ACCOUNT          L"NT AUTHORITY\\LocalService"
+#define _SERVICE_NAME             "CrashFix Service"
+#define _SERVICE_DISPLAY_NAME     "CrashFix Service"
+#define _SERVICE_DESC             "Processes crash report files"
+#define _SERVICE_ACCOUNT          "NT AUTHORITY\\LocalService"
 SERVICE_STATUS CDaemon::m_ServiceStatus;
 SERVICE_STATUS_HANDLE CDaemon::m_ServiceStatusHandle;
 #endif
@@ -344,6 +344,7 @@ void CDaemon::ReadConfig()
 	m_nMaxQueueSize = config.getProfileInt("MAX_QUEUE_SIZE", 100);
 
 	// Read server port number
+	//TODO: m_nServerHost = config.getProfileString("SERVER_HOST", 50, "0.0.0.0");
 	m_nServerPort = config.getProfileInt("SERVER_PORT", 50);
 
 	// Read pid file name
@@ -430,6 +431,11 @@ void CDaemon::ReadConfig()
 	m_bNotifyWebmasterOnErrors = 1== config.getProfileInt("NOTIFY_WEBMASTER_ON_ERRORS", 0);
 
 	m_bRestartDaemonOnCrash = 1== config.getProfileInt("RESTART_DAEMON_ON_CRASH", 0);
+
+	m_sServiceName        = strconv::utf82w(config.getProfileString("SERVICE_NAME"         ,szBuff, 2048, _SERVICE_NAME         ));
+	m_sServiceDisplayName = strconv::utf82w(config.getProfileString("SERVICE_DISPLAY_NAME" ,szBuff, 2048, _SERVICE_DISPLAY_NAME ));
+	m_sServiceDesc        = strconv::utf82w(config.getProfileString("SERVICE_DESC"         ,szBuff, 2048, _SERVICE_DESC         ));
+	m_sServiceAccount     = strconv::utf82w(config.getProfileString("SERVICE_ACCOUNT"      ,szBuff, 2048, _SERVICE_ACCOUNT      ));
 }
 
 void CDaemon::InitErrorLog()
@@ -1424,6 +1430,7 @@ bool CDaemon::GetError(int nIndex, std::string& sError)
 #ifdef _WIN32
 int CDaemon::Install()
 {
+	ReadConfig();
 #ifdef _WIN32
 	return InstallNTService();
 #else
@@ -1433,6 +1440,7 @@ int CDaemon::Install()
 
 int CDaemon::Remove()
 {
+	ReadConfig();
 #ifdef _WIN32
 	return RemoveNTService();
 #else
@@ -1460,11 +1468,14 @@ int CDaemon::InstallNTService()
 	sCmdLine += L"\"";
 	sCmdLine += L" --run-as-service";
 
+	wprintf(L"Inspall service: %s\n", m_sServiceName.c_str());
+	wprintf(L"  %s\n", m_sServiceDisplayName.c_str());
+
 	// Install the service into SCM by calling CreateService
 	SC_HANDLE hService = CreateService(
         hSCManager,                     // SCManager database
-        SERVICE_NAME,                   // Name of service
-        SERVICE_DISPLAY_NAME,           // Name to display
+        m_sServiceName        .c_str(), // Name of service
+        m_sServiceDisplayName .c_str(), // Name to display
         SERVICE_QUERY_STATUS,           // Desired access
         SERVICE_WIN32_OWN_PROCESS,      // Service type
         SERVICE_AUTO_START,             // Service start type
@@ -1487,11 +1498,11 @@ int CDaemon::InstallNTService()
 	CloseServiceHandle(hService);
 
 	// Set service description
-	hService = OpenService(hSCManager, SERVICE_NAME, SERVICE_CHANGE_CONFIG);
+	hService = OpenService(hSCManager, m_sServiceName.c_str(), SERVICE_CHANGE_CONFIG);
 	if(hService)
 	{
 		SERVICE_DESCRIPTION sd;
-		sd.lpDescription = SERVICE_DESC;
+		sd.lpDescription = const_cast<LPWSTR>(m_sServiceDesc.c_str());
 		if(!ChangeServiceConfig2(hService, SERVICE_CONFIG_DESCRIPTION, &sd))
 		{
 			wprintf(L"Error changing service config: %s\n", GetErrorMsg().c_str());
@@ -1528,7 +1539,7 @@ int CDaemon::RemoveNTService()
 	}
 
 	// Open existing service
-	SC_HANDLE hService = OpenService(hSCManager, SERVICE_NAME, SERVICE_STOP |
+	SC_HANDLE hService = OpenService(hSCManager, m_sServiceName.c_str(), SERVICE_STOP |
         SERVICE_QUERY_STATUS | DELETE);
 	if(!hService)
 	{
@@ -1540,7 +1551,7 @@ int CDaemon::RemoveNTService()
 	// Try to stop the service
     if(ControlService(hService, SERVICE_CONTROL_STOP, &ssSvcStatus))
     {
-        wprintf(L"Stopping %s.", SERVICE_NAME);
+        wprintf(L"Stopping %s.", m_sServiceName.c_str());
         Sleep(1000);
 
         while (QueryServiceStatus(hService, &ssSvcStatus))
@@ -1555,11 +1566,11 @@ int CDaemon::RemoveNTService()
 
         if (ssSvcStatus.dwCurrentState == SERVICE_STOPPED)
         {
-            wprintf(L"\n%s is stopped.\n", SERVICE_NAME);
+            wprintf(L"\n%s is stopped.\n", m_sServiceName.c_str());
         }
         else
         {
-            wprintf(L"\n%s failed to stop.\n", SERVICE_NAME);
+            wprintf(L"\n%s failed to stop.\n", m_sServiceName.c_str());
         }
     }
 
@@ -1592,7 +1603,7 @@ int CDaemon::StartNTService(BOOL bStart)
 	}
 
 	// Open existing service
-	SC_HANDLE hService = OpenService(hSCManager, SERVICE_NAME, SERVICE_START|SERVICE_STOP|SERVICE_INTERROGATE);
+	SC_HANDLE hService = OpenService(hSCManager, m_sServiceName.c_str(), SERVICE_START|SERVICE_STOP|SERVICE_INTERROGATE);
 	if(!hService)
 	{
 		// Print error message
@@ -1680,7 +1691,7 @@ void CDaemon::EnterServiceMain()
 {
 	SERVICE_TABLE_ENTRY serviceTable[] =
     {
-        { SERVICE_NAME, ServiceMain },
+        { const_cast<LPWSTR>(m_sServiceName.c_str()), ServiceMain },
         { NULL, NULL }
     };
 
@@ -1704,7 +1715,9 @@ void WINAPI CDaemon::ServiceMain(DWORD dwArgc, PWSTR *pszArgv)
 	m_ServiceStatus.dwCheckPoint     = 0;
 	m_ServiceStatus.dwWaitHint      = 0;
 
-	m_ServiceStatusHandle = RegisterServiceCtrlHandler(SERVICE_NAME,
+	CDaemon* pDaemon = CDaemon::GetInstance();
+
+	m_ServiceStatusHandle = RegisterServiceCtrlHandler(pDaemon->m_sServiceName.c_str(),
 		(LPHANDLER_FUNCTION)ServiceControlHandler);
 	if (m_ServiceStatusHandle == (SERVICE_STATUS_HANDLE)0)
 	{
@@ -1717,7 +1730,6 @@ void WINAPI CDaemon::ServiceMain(DWORD dwArgc, PWSTR *pszArgv)
 	sDirName = GetParentDir(sDirName);
 	SetCurrentDirectory(sDirName.c_str());
 
-	CDaemon* pDaemon = CDaemon::GetInstance();
 
 	// Report initial status to the SCM
     pDaemon->SetServiceStatus( SERVICE_START_PENDING, NO_ERROR, 3000 );

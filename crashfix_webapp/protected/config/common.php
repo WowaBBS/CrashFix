@@ -34,3 +34,4 @@ function dbParams($overrideTablePrefix=null)
         );
 }
 
+$userParams = parse_ini_file(dirname(__FILE__).DIRECTORY_SEPARATOR.'user_params.ini');

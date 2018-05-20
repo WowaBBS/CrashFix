@@ -25,8 +25,8 @@ return array(
 				
 		'daemon'=>array(
 			'class'=>'Daemon',
-			'host'=>'127.0.0.1',
-			'servicePort'=>'50',
+			'host'=>$userParams['deamon_host'] ?? '127.0.0.1',
+			'servicePort'=>$userParams['deamon_port'] ?? '50',
 		),		
 		
 		'log'=>array(

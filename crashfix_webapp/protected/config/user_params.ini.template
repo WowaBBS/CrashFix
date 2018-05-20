@@ -33,5 +33,8 @@ db_password=crashfixpwd
 ; so on.
 db_table_prefix=tbl_ 
 
+; Deamon host. Default is 127.0.0.1
+;deamon_host=127.0.0.1
 
-
+; Deamon port. Default is 50
+;deamon_port=50

@@ -35,7 +35,7 @@ public:
 	//! @param[in] param_name Name of the string
 	//! @param[out] buf Buffer that receives string's value
 	//! @param[in] buf_len Length of the buffer
-	char* getProfileString(const char* param_name, char* buf, int buf_len);
+	char* getProfileString(const char* param_name, char* buf, int buf_len, char* default_val=NULL);
 
 	//! Reads an integer value from config file
 	//! @param[in] param_name Name of the parameter

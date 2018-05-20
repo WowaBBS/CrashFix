@@ -129,3 +129,10 @@ RESTART_DAEMON_ON_CRASH = 1
 
 MONITOR_LOG_PATH = logs\monitor.log
 
+#TODO: SERVER_HOST=0.0.0.0
+#SERVER_PORT=50
+
+#SERVICE_NAME         =CrashFix
+#SERVICE_DISPLAY_NAME =CrashFix Service
+#SERVICE_DESC         =Processes crash report files
+#SERVICE_ACCOUNT      =NT AUTHORITY\\LocalService

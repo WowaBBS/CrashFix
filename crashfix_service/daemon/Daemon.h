@@ -258,6 +258,12 @@ protected:
     int m_nServerPort;                 //!< Socket server port.
 	std::string m_sWebRootDir;         //!< The directory where index.php is located.
 	std::string m_sPollCommand;        //!< Polling command
+
+	std::wstring m_sServiceName        ; //!< SERVICE_NAME         "CrashFix"
+	std::wstring m_sServiceDisplayName ; //!< SERVICE_DISPLAY_NAME "CrashFix Service"
+	std::wstring m_sServiceDesc        ; //!< SERVICE_DESC         "Processes crash report files"
+	std::wstring m_sServiceAccount     ; //!< SERVICE_ACCOUNT      "NT AUTHORITY\\LocalService"
+
 	bool m_bRestartedAfterCrash;       //!< Monitor has restarted us after our crash.
 
     // Logging related settings
