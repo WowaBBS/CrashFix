@@ -28,6 +28,7 @@ You have no projects assigned.
 			$versions = Yii::app()->user->getCurProjectVersions($selVer);			
 			echo CHtml::dropDownList('ver', array('selected'=>$selVer), $versions); 
 		?>					
+		<input type="submit" value="Ok" />
 	</div>
 	<?php echo CHtml::endForm(); ?>
 </div>
@@ -126,7 +127,12 @@ You have no projects assigned.
 <?php 
  $script = <<<SCRIPT
 
-$(":checkbox").live('click', function(e)
+$("#proj, #ver").bind('change', function(e)
+{	
+	$("#proj_form").submit();
+});
+
+$(":checkbox").live('click', function(e) // WOWA: TODO: Bug
 {	
 	var totalSelected = 0;
 	$("input[name='DeleteRows\[\]']").each(function() {if($(this).attr('checked')) totalSelected++;});
@@ -138,11 +144,6 @@ $(":checkbox").live('click', function(e)
 	
 });
    
-$("#proj, #ver").bind('change', function(e)
-{	
-	$("#proj_form").submit();
-});
-
 SCRIPT;
  
  Yii::app()->getClientScript()->registerScript(

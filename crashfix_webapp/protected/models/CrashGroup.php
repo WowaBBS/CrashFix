@@ -160,7 +160,8 @@ class CrashGroup extends CActiveRecord
 		$criteria->compare('id', $this->id);
 		$criteria->select = 't.*, COUNT({{crashreport}}.id) AS crashReportCount';
 		$criteria->compare('created',$this->created, true);
-		$criteria->compare('t.status', $this->status);
+		if($this->status!==0) // Wowa
+			$criteria->compare('t.status', $this->status);
 		$criteria->compare('title', $this->title, true);		
         
         if($this->bugStatusFilter=='open')

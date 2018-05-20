@@ -252,6 +252,7 @@ protected:
 	std::string m_sLicenseFile;        //!< License file.
     std::string m_sPIDFile;            //!< PID file path.
     std::string m_sConfigFile;         //!< Config file path.
+    std::string m_sPhpFile;            //!< Php file path.
     int m_nThreadCount;                //!< Count of threads.
     int m_nMaxQueueSize;               //!< Maximum queue size.
     int m_nServerPort;                 //!< Socket server port.

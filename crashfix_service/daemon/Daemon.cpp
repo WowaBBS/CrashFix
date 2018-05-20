@@ -366,8 +366,14 @@ void CDaemon::ReadConfig()
 	if(!m_sWebRootDir.empty() && m_sWebRootDir.at(m_sWebRootDir.length()-1)!='/')
 		m_sWebRootDir += '/';
 
+	m_sPhpFile = config.getProfileString("PHP_FILE", szBuff, 2048);
+	AddPrefix(m_sPhpFile); // This parameter is affected by prefix
+	if(m_sPhpFile.empty())
+		m_sPhpFile = "php";
+
 	// Format polling command
-	m_sPollCommand = "php \"";
+	m_sPollCommand = m_sPhpFile;
+	m_sPollCommand += " \"";
 	m_sPollCommand += m_sWebRootDir;
 	m_sPollCommand += "protected/yiic.php\" poll";
 

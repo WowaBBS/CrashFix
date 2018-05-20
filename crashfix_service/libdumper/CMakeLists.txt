@@ -21,7 +21,7 @@ if(UNIX)
 	ADD_PCH_RULE("stdafx.cpp"  source_files)
 	SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ldl")
 else(UNIX)
-	ADD_MSVC_PRECOMPILED_HEADER("stdafx.h" "stdafx.cpp" source_files)
+	#ADD_MSVC_PRECOMPILED_HEADER("stdafx.h" "stdafx.cpp" source_files)
 endif(UNIX)
 
 # Add build target
@@ -32,10 +32,12 @@ set_target_properties(libdumper PROPERTIES DEBUG_POSTFIX d)
 
 # Specify link dependencies for the target
 target_link_libraries(libdumper zlib minizip tinyxml)
+if(WIN32)
+target_link_libraries(libdumper Psapi.Lib)
+endif(WIN32)
 
 # In Linux, link to pthread library
 if(UNIX)	
 	target_link_libraries(libdumper pthread)
 	set_target_properties(libdumper PROPERTIES COMPILE_FLAGS "-lrt")
 endif(UNIX)
-

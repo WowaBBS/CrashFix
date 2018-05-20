@@ -1,6 +1,7 @@
 <?php
 Yii::import('application.vendors.ezcomponents.*');
-require_once "Base/src/base.php"; 
+Yii::import('application.vendors.SevenZipArchive');
+require_once "Base/src/base.php";
 Yii::registerAutoloader(array('ezcBase', 'autoload'), true);
 
 
@@ -209,21 +210,67 @@ class DebugInfoController extends Controller
 		
 		if(isset($_POST['DebugInfo']))
 		{			
-			$submitted = true;
-			$model->attributes = $_POST['DebugInfo'];					
-			$model->guid = 'tmp_'.MiscHelpers::GUID();
-						
-			if($model->validate())
-			{				
+			$attachmentName = $_FILES['DebugInfo']['name']['fileAttachment'];
+			if (preg_match('/\\.7z$/i', $attachmentName ))
+			{ // [Wowa]
+				$tmpName = $_FILES['DebugInfo']['tmp_name']['fileAttachment'];
 				
-				// Get uploaded file
-				$model->fileAttachment = 
+				$zip = new SevenZipArchive($tmpName);
+
+				$tmpDir = sys_get_temp_dir() . "/upload_tmp";
+				if (!file_exists($tmpDir))
+				mkdir($tmpDir);
+				$files = glob($tmpDir . '/*'); // get all file names
+				foreach($files as $file){ // iterate files
+					if(is_file($file))
+					unlink($file); // delete file
+				}
+				$zip->extractTo($tmpDir);
+				$files = glob($tmpDir . '/*');
+				foreach($files as $file)
+				{
+					if(!is_file($file))
+						continue;
+					
+					$file_md5 = md5_file($file);
+					$model3 = DebugInfo::model()->find(array(
+						'condition'=>'md5=:md5',
+						'params'=>array(':md5'=>$file_md5),
+					));
+					
+					if($model3!==Null) // skip existing files with same hash
+						continue;
+
+					$model2 = new DebugInfo('create');
+					$model2->fileAttachmentIsUploaded = false;
+					$model2->attributes = $_POST['DebugInfo'];
+					$model2->guid = 'tmp_'.MiscHelpers::GUID();
+
+					// Get uploaded file
+					$model2->fileAttachment = new CUploadedFile(pathinfo($file, PATHINFO_BASENAME ), $file, 'pdb', filesize($file), 0);
+					// This will create a new record in the {{debuginfo}} db table
+					// and move the uploaded file to its persistent location.
+					$model2->save();
+				}
+			}
+			else
+			{
+				$submitted = true;
+				$model->attributes = $_POST['DebugInfo'];
+				$model->guid = 'tmp_'.MiscHelpers::GUID();
+						
+				if($model->validate())
+				{
+				
+					// Get uploaded file
+					$model->fileAttachment = 
 						CUploadedFile::getInstance($model, 'fileAttachment');
 
-				// This will create a new record in the {{debuginfo}} db table
-				// and move the uploaded file to its persistent location.
-				$model->save();			
+					// This will create a new record in the {{debuginfo}} db table
+					// and move the uploaded file to its persistent location.
+					$model->save();
 				
+				}
 			}
 		}
 				
@@ -252,41 +299,94 @@ class DebugInfoController extends Controller
 				$action = self::ACTION_UPLOAD;
 		}
 		
-		// Create new model instance
-		$model = new DebugInfo('create');
-	
-		// Fill model attributes		
-		if(isset($_POST['DebugInfo']))
-			$model->attributes = $_POST['DebugInfo'];			
-		        
-		// Check if file with such a GUID exists
-		$fileNotFound = $model->checkFileGUIDExists();
+		$model2=false;
+		if(isset($_POST['DebugInfo']) && IsSet($_FILES['DebugInfo']))
+		{ // [Wowa]
+			$attachmentName = $_FILES['DebugInfo']['name']['fileAttachment'];
+			if (preg_match('/\\.7z$/i', $attachmentName ))
+			{
+				$tmpName = $_FILES['DebugInfo']['tmp_name']['fileAttachment'];
 				
-		// Determine what to do based on the "action" attribute
-		if($action==self::ACTION_CHECK )
-		{	
-			// Just render the result of checking GUID presence.
-			$this->renderPartial('_upload', array('model'=>$model));				
-		}
-		else
-		{		
-			// The following code is executed when action is self::ACTION_UPLOAD
-		
-			// Check if we have found such file in the database. If yes, we do not need
-			// to upload another one.
-			if($fileNotFound && $model->validate())
-			{					
-				// Get uploaded file
-				$model->fileAttachment = CUploadedFile::getInstance($model, 'fileAttachment');
-				
-				// This will create a new record in the {{debuginfo}} db table			
-				$model->save();
+				$zip = new SevenZipArchive($tmpName);
+
+				$tmpDir = sys_get_temp_dir() . "/upload_tmp";
+				if (!file_exists($tmpDir))
+				mkdir($tmpDir);
+				$files = glob($tmpDir . '/*'); // get all file names
+				foreach($files as $file){ // iterate files
+					if(is_file($file))
+					unlink($file); // delete file
+				}
+				$zip->extractTo($tmpDir);
+				$files = glob($tmpDir . '/*');
+				foreach($files as $file)
+				{
+					if(!is_file($file))
+						continue;
+				/*
+					$file_md5 = md5_file($file);
+					$model3 = DebugInfo::model()->find(array(
+										'condition'=>'md5=:md5',
+										'params'=>array(':md5'=>$file_md5),
+										));
+										
+					if($model3!==Null) // skip existing files with same hash
+						continue;
+				*/
+					$model2 = new DebugInfo('create');
+					$model2->attributes = $_POST['DebugInfo'];
+					$fileNotFound = $model2->checkFileGUIDExists();
+					if(!$fileNotFound) continue;
+
+					// Get uploaded file
+					$model2->fileAttachmentIsUploaded = false;
+					$model2->fileAttachment = new CUploadedFile(pathinfo($file, PATHINFO_BASENAME ), $file, 'pdb', filesize($file), 0);
+					// This will create a new record in the {{debuginfo}} db table
+					// and move the uploaded file to its persistent location.
+					$model2->save();
+				}
+				$this->renderPartial('_upload', array('model'=>$model2));
 			}
-			
-			// Display the result		
-			$this->renderPartial('_upload', array('model'=>$model));	
 		}
-	}	
+
+		if(!$model2)
+		{
+			// Create new model instance
+			$model = new DebugInfo('create');
+	
+			// Fill model attributes		
+			if(isset($_POST['DebugInfo']))
+				$model->attributes = $_POST['DebugInfo'];			
+		        
+			// Check if file with such a GUID exists
+			$fileNotFound = $model->checkFileGUIDExists();
+				
+			// Determine what to do based on the "action" attribute
+			if($action==self::ACTION_CHECK )
+			{	
+				// Just render the result of checking GUID presence.
+				$this->renderPartial('_upload', array('model'=>$model));				
+			}
+			else
+			{		
+				// The following code is executed when action is self::ACTION_UPLOAD
+		
+				// Check if we have found such file in the database. If yes, we do not need
+				// to upload another one.
+				if($fileNotFound && $model->validate())
+				{					
+					// Get uploaded file
+					$model->fileAttachment = CUploadedFile::getInstance($model, 'fileAttachment');
+					
+					// This will create a new record in the {{debuginfo}} db table			
+					$model->save();
+				}
+				
+				// Display the result		
+				$this->renderPartial('_upload', array('model'=>$model));
+			}
+		}
+	}
 	
 	/**
 	 * Returns the data model based on the primary key given in the GET variable.

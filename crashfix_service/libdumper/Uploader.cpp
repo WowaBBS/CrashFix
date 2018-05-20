@@ -10,6 +10,7 @@
 #include "HttpRequestSender.h"
 #include "strconv.h"
 #include "PdbReader.h"
+#include <io.h>
 
 #define SECTION_GENERAL   _T("General")
 #define ENTRY_UPLOAD_URL  _T("UploadURL")
@@ -337,7 +338,7 @@ DWORD WINAPI CUploader::UploadThread(LPVOID lpParam)
 	return 0;
 }
 
-void CUploader::InternalUploadFiles()
+void CUploader::InternalUploadFiles(bool bCheck, bool bUpload)
 {
 	m_sErrorMsg = "Unspecified error.";
 	CHttpRequestSender RequestSender;	
@@ -401,78 +402,107 @@ void CUploader::InternalUploadFiles()
 		HttpRequest.m_aTextFields["DebugInfo[guid]"] = strconv::w2a(sGUIDnAge);
 		HttpRequest.m_aTextFields["DebugInfo[srcpath]"] = strconv::w2a(pfi->m_sFileName);
 
-		// Send request
-		BOOL bSend = RequestSender.SendAssync(HttpRequest, &m_Assync);
-		if(!bSend)
-		{			
-			// Set item status to failed
-			m_Stats.m_nErrors++; 
-			SetFileStatus(i, FUS_FAILED);									
-			continue;
-		}
-		
-		// Wait for request completion
-		int nStatus = m_Assync.WaitForCompletion();
-		if(nStatus!=0)
-		{
-			m_Stats.m_nIgnored++; 
-			SetFileStatus(i, FUS_IGNORED);			
-			continue;
-		}
+    int nStatus=0;
+    if(bCheck)
+    {
+      // Send request
+      BOOL bSend = RequestSender.SendAssync(HttpRequest, &m_Assync);
+      if(!bSend)
+      {			
+        // Set item status to failed
+        m_Stats.m_nErrors++; 
+        SetFileStatus(i, FUS_FAILED);									
+        continue;
+      }
 
-		if(m_Assync.IsCancelled())
-			goto exit;
+      // Wait for request completion
+      nStatus = m_Assync.WaitForCompletion();
+      if(nStatus!=0)
+      {
+        m_Stats.m_nIgnored++; 
+        SetFileStatus(i, FUS_IGNORED);			
+        continue;
+      }
 
-		// Now we can upload the file
-		HttpRequest.m_aTextFields["action"] = "UploadFile";		
-		CHttpRequestFile f;
-		f.m_sContentType = "application/octet-stream";
-		f.m_sSrcFileName = pfi->m_sFileName.c_str();
-		HttpRequest.m_aIncludedFiles["DebugInfo[fileAttachment]"] = f;
+      if(m_Assync.IsCancelled())
+        goto exit;
+    }
 
-		// Send request
-		m_Assync.Reset();
-		bSend = RequestSender.SendAssync(HttpRequest, &m_Assync);
-		if(!bSend)
-		{			
-			// Set item status failed
-			m_Stats.m_nErrors++; 
-			SetFileStatus(i, FUS_FAILED);			
-		}
+    if(true) // bPack
+    {
+      SetFileStatus(i, FUS_PACKING);
+    //WinExec("", 1);
+      // TODO: If win add ".exe"
+      std::wstring Cmd=L"7z a \""+pfi->m_sFileName+L".7z\" \""+pfi->m_sFileName+L"\"";
+      system(strconv::w2utf8(Cmd).c_str());
+    }
 
-		// Set status to uploading
-		SetFileStatus(i, FUS_UPLOADING);		
+    if(bUpload)
+    {
+      // Now we can upload the file
+      HttpRequest.m_aTextFields["action"] = "UploadFile";
+      CHttpRequestFile f;
+      f.m_sContentType = "application/octet-stream";
+      std::wstring FileName=pfi->m_sFileName+L".7z";
+      if(access(strconv::w2utf8(FileName).c_str(), 0) != -1)
+    //if(::ifstream(strconv::w2utf8(FileName).c_str(), ios::in | ios::nocreate) != NULL)
+    //if(FileExists(FileName.c_str()))
+        f.m_sSrcFileName = FileName.c_str();
+      else
+        f.m_sSrcFileName = pfi->m_sFileName.c_str();
+      HttpRequest.m_aIncludedFiles["DebugInfo[fileAttachment]"] = f;
 
-		// Wait for request completion
-		if(m_pfnCallback)
-		{
-			do
-			{				
-				NotifyFileUploadProgress(i);
-				Sleep(100);
+      // Send request
+      m_Assync.Reset();
+      BOOL bSend = RequestSender.SendAssync(HttpRequest, &m_Assync);
+      if(!bSend)
+      {			
+        // Set item status failed
+        m_Stats.m_nErrors++; 
+        SetFileStatus(i, FUS_FAILED);			
+      }
 
-				if(m_Assync.IsCancelled())
-				{
-					m_Stats.m_nErrors++; 
-					goto exit;
-				}
-			}
-			while(!m_Assync.IsCompleted());
-		}
-		else
-		{
-			nStatus = m_Assync.WaitForCompletion();
-		}
-		if(nStatus==0)
-		{
-			m_Stats.m_nUploaded++; 
-			SetFileStatus(i, FUS_UPLOADED);			
-		}
-		else
-		{
-			m_Stats.m_nErrors++; 
-			SetFileStatus(i, FUS_FAILED);			
-		}
+      // Set status to uploading
+      SetFileStatus(i, FUS_UPLOADING);		
+
+      // Wait for request completion
+      if(m_pfnCallback)
+      {
+        do
+        {
+          NotifyFileUploadProgress(i);
+          Sleep(100);
+
+          if(m_Assync.IsCancelled())
+          {
+            m_Stats.m_nErrors++; 
+            goto exit;
+          }
+        }
+        while(!m_Assync.IsCompleted());
+      }
+      else
+      {
+        nStatus = m_Assync.WaitForCompletion();
+      }
+      if(nStatus==0)
+      {
+        m_Stats.m_nUploaded++; 
+        SetFileStatus(i, FUS_UPLOADED);			
+      }
+      else
+      {
+        m_Stats.m_nErrors++; 
+        SetFileStatus(i, FUS_FAILED);			
+      }
+    }
+
+    if(true) // bRemovePack  && bHasPack
+    {
+      std::wstring FileName=pfi->m_sFileName+L".7z";
+      remove(strconv::w2utf8(FileName).c_str());
+    }
+
 	}
 
 exit:
@@ -513,21 +543,17 @@ AssyncNotification* CUploader::GetAssync()
 std::string CUploader::FileStatusToStr(FILE_UPLOAD_STATUS status)
 {
 	std::string sStatus = "Unknown";
-	if(status==FUS_PENDING)
-		sStatus = "Pending";
-	else if(status==FUS_CHECKING)
-		sStatus = "Checking";
-	else if(status==FUS_UPLOADING)
-		sStatus = "Uploading";
-	else if(status==FUS_UPLOADED)
-		sStatus = "Uploaded";
-	else if(status==FUS_FAILED)
-		sStatus = "Failed";
-	else if(status==FUS_INVALID)
-		sStatus = "Invalid";
-	else if(status==FUS_IGNORED)
-		sStatus = "Ignored";
-
+	switch(status)
+	{
+	case FUS_PENDING   : sStatus = "Pending"   ; break;
+	case FUS_CHECKING  : sStatus = "Checking"  ; break;
+	case FUS_PACKING   : sStatus = "Packing"   ; break;
+	case FUS_UPLOADING : sStatus = "Uploading" ; break;
+	case FUS_UPLOADED  : sStatus = "Uploaded"  ; break;
+	case FUS_FAILED    : sStatus = "Failed"    ; break;
+	case FUS_INVALID   : sStatus = "Invalid"   ; break;
+	case FUS_IGNORED   : sStatus = "Ignored"   ; break;
+	}
 	return sStatus;
 }
 

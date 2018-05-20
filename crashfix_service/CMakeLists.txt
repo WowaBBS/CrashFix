@@ -31,6 +31,7 @@ include_directories(${PROJECT_BINARY_DIR}
 		${CMAKE_SOURCE_DIR}/thirdparty/tinyxml
 		${CMAKE_SOURCE_DIR}/thirdparty/zlib
 		${CMAKE_SOURCE_DIR}/thirdparty/minizip
+		${CMAKE_SOURCE_DIR}/thirdparty/wtl
 		)
 
 MACRO(ADD_MSVC_PRECOMPILED_HEADER PrecompiledHeader PrecompiledSource SourcesVar)

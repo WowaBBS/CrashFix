@@ -20,13 +20,14 @@
 // File upload status
 enum FILE_UPLOAD_STATUS
 {  
-    FUS_PENDING    = 0,  // Status pending.  	
+	FUS_PENDING    = 0,  // Status pending.  	
 	FUS_CHECKING   = 1,  // File is being checking.
-	FUS_UPLOADING  = 2,  // File is being uploaded.
-    FUS_UPLOADED   = 3,  // File was uploaded ok.
-    FUS_FAILED     = 4,  // File upload has failed.	
-	FUS_INVALID    = 5,  // File is not a valid PDB file.
-	FUS_IGNORED    = 6,  // File already presents in the database.
+	FUS_PACKING    = 2,  // File is being uploaded.
+	FUS_UPLOADING  = 3,  // File is being uploaded.
+	FUS_UPLOADED   = 4,  // File was uploaded ok.
+	FUS_FAILED     = 5,  // File upload has failed.	
+	FUS_INVALID    = 6,  // File is not a valid PDB file.
+	FUS_IGNORED    = 7,  // File already presents in the database.
 };
 
 //! Describes a file prepared for uploading.
@@ -194,7 +195,7 @@ private:
 	static DWORD WINAPI UploadThread(LPVOID lpParam);
 
 	//! Uploads selected files in another thread.
-	void InternalUploadFiles();
+	void InternalUploadFiles(bool bCheck=true, bool bUpload=true);
 
 	//! Updates file status and notifies the main thread.
 	void SetFileStatus(int nIndex, FILE_UPLOAD_STATUS NewStatus);
@@ -224,5 +225,3 @@ private:
 	AssyncNotification m_Assync; //!< Assync notification.	
 	UploadStats m_Stats;      //!< Upload statistics.
 };
-
-

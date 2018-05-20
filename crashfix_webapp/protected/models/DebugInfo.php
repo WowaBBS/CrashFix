@@ -53,7 +53,7 @@ class DebugInfo extends CActiveRecord
 			array('guid', 'required', 'on'=>'create, update'),						
 			array('guid', 'checkFileGUIDExists', 'on'=>'create'),
 			array('project_name', 'length', 'max'=>64),									
-			array('fileAttachment', 'file', 'types' => 'pdb', 'maxFiles'=>1, 'minSize'=>1, 'on'=>'create'),
+			array('fileAttachment', 'file', 'types' => array('pdb','7z'), 'maxFiles'=>1, 'minSize'=>1, 'on'=>'create'),
 			array('dateFrom', 'date', 'on'=>'search'),			
 			array('dateTo', 'date', 'on'=>'search'),	
 			array('dateTo', 'compareFromToDates', 'on'=>'search'),			
@@ -111,7 +111,7 @@ class DebugInfo extends CActiveRecord
 		// Check if such a file already exists in the database
 		$model = DebugInfo::model()->find(array(
 										'condition'=>'guid=:guid',
-										'params'=>array(':guid'=>$this->guid,),
+										'params'=>array(':guid'=>$this->guid,), //  Wowa TODO: add project
 										));
 										
 		if($model!==Null)

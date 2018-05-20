@@ -750,7 +750,7 @@ class CrashReport extends CActiveRecord
 			$criteria->compare('appversion_id', $curProjectVer, false, 'AND');
 		}		
         
-        if(isset($this->groupid))
+      if(isset($this->groupid) && $this->groupid!=0) // Wowa: Fix bug empty list
 		{
 			$criteria->compare('groupid', $this->groupid, false, 'AND');
 		}

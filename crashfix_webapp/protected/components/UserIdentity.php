@@ -26,12 +26,16 @@ class UserIdentity extends CUserIdentity
 			}
 			else if($user->pwd_reset_token==$this->oneTimeAccessToken)
 			{
+			// [Wowa] Disable reseting token
+
 				// Reset access token
-				$user->pwd_reset_token = ""; 
-				if(!$user->save())
-					$this->errorCode=self::ERROR_UNKNOWN_IDENTITY;
-				else
+				//$user->pwd_reset_token = ""; 
+				//if(!$user->save())
+				//	$this->errorCode=self::ERROR_UNKNOWN_IDENTITY;
+				//else
+				{
 					$this->errorCode=self::ERROR_NONE;					
+				}
 			}
 		}
 		else
@@ -53,6 +57,16 @@ class UserIdentity extends CUserIdentity
 			{
 				// Password valid
 				$this->errorCode=self::ERROR_NONE;
+				if($user->pwd_reset_token)
+				{
+					$user->pwd_reset_token = ""; 
+					if(!$user->save())
+					{
+						Yii::log(Yii::t('wowa','UserIdentity: Unknown Identity',[],CLogger::LEVEL_WARNING));
+						$this->errorCode=self::ERROR_UNKNOWN_IDENTITY;
+					}
+				}
+
 			}			
 		}
 		
