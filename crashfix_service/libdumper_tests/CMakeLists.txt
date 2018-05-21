@@ -21,7 +21,7 @@ endif(UNIX)
 
 add_executable(libdumper_tests ${source_files})
 if(WIN32)
-	target_link_libraries(libdumper_tests libdumper libtest)
+	target_link_libraries(libdumper_tests libdumper psapi.lib  libtest)
 else(WIN32)
 	target_link_libraries(libdumper_tests libdumper libtest ${CMAKE_DL_LIBS})
 endif(WIN32)

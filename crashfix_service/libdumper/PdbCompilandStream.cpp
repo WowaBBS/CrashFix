@@ -212,7 +212,10 @@ BOOL CPdbCompilandStream::Init(CPdbReader* pPdbReader, CMsfStream* pStream, DBI_
             }
             break;
         default:
-            bBlocks = FALSE;
+            bBlocks = TRUE; // Wowa: TODO: Was taken from apron. What for?
+            std::vector<uint8_t> buffer(BlockHeader.dwLength);
+            pStream->SetStreamPos(pStream->GetStreamPos() + sizeof(BLOCK_HEADER_32));
+            pStream->ReadData(buffer.data(), BlockHeader.dwLength, nullptr, TRUE);
             break;
         }
     }

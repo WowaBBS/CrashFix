@@ -47,6 +47,8 @@ CDaemon::CDaemon()
 	m_bRestartedAfterCrash = false;
 	//m_bCriticalError = false;
 #ifdef _WIN32
+	//m_hEventStop = CreateEvent(NULL, TRUE, FALSE, L"Local\\04B8BCA1-BDAF-4686-82CE-A7DF707C5287");
+// WWowa: TODO: Dynamic name of event
 	m_hEventStop = CreateEvent(NULL, TRUE, FALSE, L"Local\\04B8BCA1-BDAF-4686-82CE-A7DF707C5287");
 	m_bLogInitialized = false;
 #endif
@@ -778,6 +780,7 @@ void CDaemon::Die(const char* szMessage, bool bUsePStr)
 int CDaemon::Start()
 {
 #ifdef _WIN32
+	ReadConfig();
 	return StartNTService();
 #else
 	Run();
@@ -808,6 +811,7 @@ int CDaemon::Stop()
 
 #ifdef _WIN32
 
+	ReadConfig();
 	// Delete pidfile
 	DeleteFile(strconv::a2w(m_sPIDFile).c_str());
 
@@ -1468,7 +1472,7 @@ int CDaemon::InstallNTService()
 	sCmdLine += L"\"";
 	sCmdLine += L" --run-as-service";
 
-	wprintf(L"Inspall service: %s\n", m_sServiceName.c_str());
+	wprintf(L"Install service: %s\n", m_sServiceName.c_str());
 	wprintf(L"  %s\n", m_sServiceDisplayName.c_str());
 
 	// Install the service into SCM by calling CreateService
