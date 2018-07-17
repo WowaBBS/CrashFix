@@ -372,7 +372,7 @@ void CUploader::InternalUploadFiles(bool bCheck, bool bUpload)
 			continue; // This is not a valid PDB file
 		}
 
-		if(PdbReader.IsAMD64())
+		if(PdbReader.IsAMD64() && false)
 		{
 			m_Stats.m_nIgnored++; 
 			SetFileStatus(i, FUS_INVALID);						

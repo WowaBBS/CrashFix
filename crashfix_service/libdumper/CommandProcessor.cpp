@@ -1504,12 +1504,12 @@ int CCommandProcessor::ImportPdb(LPCWSTR szPdbFileName, LPCWSTR szSymDir, LPCWST
         goto exit;
     }
 
-	if(PdbReader.IsAMD64())
-	{
-		nStatus = 2;
-        m_sErrorMsg = "Unsupported architecture.";
-        goto exit;
-	}
+	//if(PdbReader.IsAMD64())
+	//{
+		//nStatus = 2;
+        //m_sErrorMsg = "Unsupported architecture.";
+        //goto exit;
+	//}
 
     // Get GUID
     sGUID = pHeaders->GetGUID();
