@@ -1638,16 +1638,16 @@ public:
    
 #ifdef __cplusplus
    #if __cplusplus >= 201402L 
-      #define NOEXCEPT noexcept
+      #define CRASHFIX_NOEXCEPT CRASHFIX_NOEXCEPT
    #else
-      #define NOEXCEPT throw()
+      #define CRASHFIX_NOEXCEPT throw()
    #endif
 #else
-   #define NOEXCEPT
+   #define CRASHFIX_NOEXCEPT throw()
 #endif
 // COM Server methods
-	LONG Unlock() NOEXCEPT
-#undef NOEXCEPT
+	LONG Unlock() CRASHFIX_NOEXCEPT
+#undef CRASHFIX_NOEXCEPT
 	{
 		LONG lRet = CComModule::Unlock();
 		if(lRet == 0)
