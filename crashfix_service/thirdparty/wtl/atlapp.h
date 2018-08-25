@@ -1635,9 +1635,19 @@ public:
 			m_hEventShutdown = NULL;
 		CAppModule::Term();
 	}
-
+   
+#ifdef __cplusplus
+   #if __cplusplus >= 201402L 
+      #define NOEXCEPT noexcept
+   #else
+      #define NOEXCEPT throw()
+   #endif
+#else
+   #define NOEXCEPT
+#endif
 // COM Server methods
-	LONG Unlock() noexcept
+	LONG Unlock() NOEXCEPT
+#undef NOEXCEPT
 	{
 		LONG lRet = CComModule::Unlock();
 		if(lRet == 0)
