@@ -1635,9 +1635,19 @@ public:
 			m_hEventShutdown = NULL;
 		CAppModule::Term();
 	}
-
+   
+#ifdef __cplusplus
+   #if __cplusplus >= 201402L 
+      #define CRASHFIX_NOEXCEPT noexcept
+   #else
+      #define CRASHFIX_NOEXCEPT throw()
+   #endif
+#else
+   #define CRASHFIX_NOEXCEPT throw()
+#endif
 // COM Server methods
-	LONG Unlock()
+	LONG Unlock() CRASHFIX_NOEXCEPT
+#undef CRASHFIX_NOEXCEPT
 	{
 		LONG lRet = CComModule::Unlock();
 		if(lRet == 0)
