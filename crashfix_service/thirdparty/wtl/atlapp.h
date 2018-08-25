@@ -1638,7 +1638,7 @@ public:
    
 #ifdef __cplusplus
    #if __cplusplus >= 201402L 
-      #define CRASHFIX_NOEXCEPT CRASHFIX_NOEXCEPT
+      #define CRASHFIX_NOEXCEPT noexcept
    #else
       #define CRASHFIX_NOEXCEPT throw()
    #endif
