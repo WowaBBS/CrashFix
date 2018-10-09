@@ -259,7 +259,7 @@ BOOL CStackWalker::NextStackFrame(BOOL bFirstFrame)
                         // The effects of the prolog must be undone to compute the
                         // context of the caller function.
 
-                        if(!UndoAMD64Prolog(pPeReader, dwUnwindInfoRVA, dwOffsInFunc))
+                        if(!UndoAMD64Prolog(pPeReader, dwInstructionAddr, dwUnwindInfoRVA, dwOffsInFunc))
                             return FALSE;
                     }
                 }
@@ -313,10 +313,10 @@ BOOL CStackWalker::GetAMD64UnwindInfo(CPeReader* pPeReader, DWORD64 dwAddr, DWOR
     {
         // Get section header
         IMAGE_SECTION_HEADER* pSection = pPeReader->GetSectionHeader(nSection);
-        if(pSection!=NULL && pSection->SizeOfRawData%sizeof(RUNTIME_FUNCTION)==0)
+        if(pSection!=NULL && pSection->Misc.VirtualSize%sizeof(RUNTIME_FUNCTION)==0)
         {
             // Walk through runtime function table
-            int nRecCount = pSection->SizeOfRawData/sizeof(RUNTIME_FUNCTION);
+            int nRecCount = pSection->Misc.VirtualSize/sizeof(RUNTIME_FUNCTION);
             int nRec;
             for(nRec=0; nRec<nRecCount; nRec++)
             {
@@ -330,10 +330,11 @@ BOOL CStackWalker::GetAMD64UnwindInfo(CPeReader* pPeReader, DWORD64 dwAddr, DWOR
                     break;
 
                 // Check if address is inside
-                if(dwAddr>=RFunc.BeginAddress && dwAddr<=RFunc.EndAddress)
+                if(dwAddr>=RFunc.BeginAddress && dwAddr<RFunc.EndAddress)
                 {
                     // Unwind info found
                     pPeReader->GetRvaByVA(RFunc.UnwindData, dwUnwindInfoRVA);
+                  //dwOffsInFunc = (DWORD)dwUnwindInfoRVA - RFunc.BeginAddress;
                     dwOffsInFunc = (DWORD)dwAddr - RFunc.BeginAddress;
                     return TRUE;
                 }
@@ -344,329 +345,338 @@ BOOL CStackWalker::GetAMD64UnwindInfo(CPeReader* pPeReader, DWORD64 dwAddr, DWOR
     return FALSE;
 }
 
-BOOL CStackWalker::UndoAMD64Prolog(CPeReader* pPeReader, DWORD dwUnwindInfoRVA, DWORD dwOffsInFunc)
+BOOL CStackWalker::UndoAMD64Prolog(CPeReader* pPeReader, DWORD64 dwAddr, DWORD dwUnwindInfoRVA, DWORD dwOffsInFunc)
 {
     UNWIND_INFO UnwindInfo;
 
-    // Read unwind info record
-    DWORD dwBytesRead = 0;
-    BOOL bRead = pPeReader->ReadImageMemory(dwUnwindInfoRVA, &UnwindInfo, sizeof(UNWIND_INFO), &dwBytesRead);
-    if(!bRead || dwBytesRead!=sizeof(UNWIND_INFO))
-        return FALSE;
-
-    // Check unwind info version
-    if(UnwindInfo.Version!=1)
-        return FALSE; // Invalid version
-
-    if((UnwindInfo.Flags&UNW_FLAG_CHAININFO)!=0)
+    while(true)
     {
-        // Chained unwind info
-
-        DWORD dwRFuncRVA = dwUnwindInfoRVA+4+UnwindInfo.CountOfCodes*sizeof(UNWIND_CODE);
-
-        RUNTIME_FUNCTION RFunc;
-
-        // Get runtime function record
+        // Read unwind info record
         DWORD dwBytesRead = 0;
-        BOOL bRead = pPeReader->ReadImageMemory(dwRFuncRVA, &RFunc, sizeof(RUNTIME_FUNCTION), &dwBytesRead);
-        if(!bRead || dwBytesRead!=sizeof(RUNTIME_FUNCTION))
+        BOOL bRead = pPeReader->ReadImageMemory(dwUnwindInfoRVA, &UnwindInfo, sizeof(UNWIND_INFO), &dwBytesRead);
+        if(!bRead || dwBytesRead!=sizeof(UNWIND_INFO))
             return FALSE;
-
-        assert(0);
-    }
-
-    // Get count of unwind codes
-    int nCodeCount = UnwindInfo.CountOfCodes;
-    if(nCodeCount<=0)
-        return FALSE; // Invalid code count
-
-    // Get pointer to AMD64 thread context
-    PCONTEXT_x64 pThreadContextX64 = (PCONTEXT_x64)m_pThreadContext;
-
-    // Determine what register is used as frame pointer
-    PDWORD64 pFPReg = NULL;
-    if(UnwindInfo.FrameRegister!=0)
-    {
-        pFPReg = GetGPRegByIndex(UnwindInfo.FrameRegister);
-    }
-
-    // Walk through unwind codes in reverse order
-    int i;
-    for(i=nCodeCount-1; i>=0; i--)
-    {
-        UNWIND_CODE UnwindCode;
-
-        DWORD dwUnwindCodeRVA = dwUnwindInfoRVA+4+i*sizeof(UNWIND_CODE);
-
-        // Read unwind code
-        DWORD dwBytesRead = 0;
-        BOOL bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA, &UnwindCode, sizeof(UNWIND_CODE), &dwBytesRead);
-        if(!bRead || dwBytesRead!=sizeof(UNWIND_CODE))
-            return FALSE;
-
-        // Check if we should undo the rest of prolog
-        if(dwOffsInFunc<UnwindCode.CodeOffset)
-            continue; // Skip this
-
-        // Check unwind operation
-        switch(UnwindCode.UnwindOp)
+    
+        // Check unwind info version
+        if(UnwindInfo.Version!=1)
+            return FALSE; // Invalid version
+    
+        // Get count of unwind codes
+        int nCodeCount = UnwindInfo.CountOfCodes;
+      //if(nCodeCount<=0)
+      //    return FALSE; // Invalid code count
+    
+        // Get pointer to AMD64 thread context
+        PCONTEXT_x64 pThreadContextX64 = (PCONTEXT_x64)m_pThreadContext;
+    
+        // Determine what register is used as frame pointer
+        PDWORD64 pFPReg = NULL;
+        if(UnwindInfo.FrameRegister!=0)
         {
-        case UWOP_PUSH_NONVOL: // Push a nonvolatile integer register, decrementing RSP by 8.
+            pFPReg = GetGPRegByIndex(UnwindInfo.FrameRegister);
+        }
+    
+        // Walk through unwind codes in reverse order
+      //int i;
+      //for(i=nCodeCount-1; i>=0; i--)
+        for(int i=0; i<nCodeCount; i++)
+        {
+            UNWIND_CODE UnwindCode;
+    
+            DWORD dwUnwindCodeRVA = dwUnwindInfoRVA+4+i*sizeof(UNWIND_CODE);
+    
+            // Read unwind code
+            DWORD dwBytesRead = 0;
+            BOOL bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA, &UnwindCode, sizeof(UNWIND_CODE), &dwBytesRead);
+            if(!bRead || dwBytesRead!=sizeof(UNWIND_CODE))
+                return FALSE;
+    
+            // Check if we should undo the rest of prolog
+            if(dwOffsInFunc<UnwindCode.CodeOffset)
+                continue; // Skip this
+    
+            // Check unwind operation
+            switch(UnwindCode.UnwindOp)
             {
-                // Determine what register to read
-                PDWORD64 pReg = GetGPRegByIndex(UnwindCode.OpInfo);
-
-                // Read register from stack top (RSP)
-                DWORD64 dwVal = 0;
-                bRead = m_pMdmpReader->ReadMemory(pThreadContextX64->Rsp, &dwVal, 8, &dwBytesRead);
-                if(!bRead || dwBytesRead!=8)
-                    return FALSE;
-                *pReg = dwVal;
-
-                // Increment RSP by 8
-                pThreadContextX64->Rsp+=8;
-            }
-            break;
-        case UWOP_ALLOC_LARGE: // Allocate a large-sized area on the stack.
-            {
-                // There are two forms. If the operation info equals 0, then the size of the allocation
-                // divided by 8 is recorded in the next slot, allowing an allocation up to 512K – 8. If
-                // the operation info equals 1, then the unscaled size of the allocation is recorded in
-                // the next two slots in little-endian format, allowing allocations up to 4GB – 8.
-
-                if(UnwindCode.OpInfo==0)
+            case UWOP_PUSH_NONVOL: // Push a nonvolatile integer register, decrementing RSP by 8.
                 {
-                    // Read the next unwind code slot
+                    // Determine what register to read
+                    PDWORD64 pReg = GetGPRegByIndex(UnwindCode.OpInfo);
+    
+                    // Read register from stack top (RSP)
+                    DWORD64 dwVal = 0;
+                    bRead = m_pMdmpReader->ReadMemory(pThreadContextX64->Rsp, &dwVal, 8, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=8)
+                        return FALSE;
+                    *pReg = dwVal;
+    
+                    // Increment RSP by 8
+                    pThreadContextX64->Rsp+=8;
+                }
+                break;
+            case UWOP_ALLOC_LARGE: // Allocate a large-sized area on the stack.
+                {
+                    // There are two forms. If the operation info equals 0, then the size of the allocation
+                    // divided by 8 is recorded in the next slot, allowing an allocation up to 512K – 8. If
+                    // the operation info equals 1, then the unscaled size of the allocation is recorded in
+                    // the next two slots in little-endian format, allowing allocations up to 4GB – 8.
+    
+                    if(UnwindCode.OpInfo==0)
+                    {
+                        // Read the next unwind code slot
+                        i++;
+                        WORD wFixedStackAllocSize = 0;
+                        bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &wFixedStackAllocSize, sizeof(WORD), &dwBytesRead);
+                        if(!bRead || dwBytesRead!=sizeof(WORD))
+                            return FALSE;
+    
+                        pThreadContextX64->Rsp += 8*wFixedStackAllocSize;
+                    }
+                    else
+                    {
+                        // Read the next two slots
+                        i+=2;
+                        DWORD dwFixedStackAllocSize = 0;
+                        bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &dwFixedStackAllocSize, sizeof(DWORD), &dwBytesRead);
+                        if(!bRead || dwBytesRead!=sizeof(DWORD))
+                            return FALSE;
+    
+                        pThreadContextX64->Rsp += dwFixedStackAllocSize;
+                    }
+                }
+                break;
+            case UWOP_ALLOC_SMALL: // Allocate a small-sized area on the stack.
+                {
+                    // The size of the allocation is the operation info field * 8 + 8,
+                    // allowing allocations from 8 to 128 bytes.
+    
+                    pThreadContextX64->Rsp += UnwindCode.OpInfo*8+8;
+                }
+                break;
+            case UWOP_SET_FPREG: // Establish the frame pointer register
+                {
+                    // The offset is equal to the Frame Register offset (scaled) field
+                    // in the UNWIND_INFO * 16, allowing offsets from 0 to 240. The use
+                    // of an offset permits establishing a frame pointer that points to
+                    // the middle of the fixed stack allocation, helping code density by
+                    // allowing more accesses to use short instruction forms. Note that
+                    // the operation info field is reserved and should not be used.
+    
+                    // Determine what register is the frame register
+                    PDWORD64 pReg = GetGPRegByIndex(UnwindInfo.FrameRegister);
+    
+                    pReg -= UnwindInfo.FrameOffset*16;
+                }
+                break;
+            case UWOP_SAVE_NONVOL: // Save a nonvolatile integer register on the stack using a MOV instead of a PUSH
+                {
+                    // This is primarily used for shrink-wrapping, where a nonvolatile
+                    // register is saved to the stack in a position that was previously allocated.
+                    // The operation info is the number of the register. The scaled-by-8 stack offset
+                    // is recorded in the next unwind operation code slot, as described in the note above.
+    
+                    // Determine what register to read
+                    PDWORD64 pReg = GetGPRegByIndex(UnwindCode.OpInfo);
+    
+                    // Read the next slot
                     i++;
-                    WORD wFixedStackAllocSize = 0;
-                    bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &wFixedStackAllocSize, sizeof(WORD), &dwBytesRead);
+                    WORD wRegOffsInStack = 0;
+                    bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &wRegOffsInStack, sizeof(WORD), &dwBytesRead);
                     if(!bRead || dwBytesRead!=sizeof(WORD))
                         return FALSE;
-
-                    pThreadContextX64->Rsp -= 8*wFixedStackAllocSize;
+    
+                    // Calculate offset of the saved register's value in stack
+                    DWORD64 dwRegValRVA = 0;
+                    if(UnwindInfo.FrameRegister==0)
+                        dwRegValRVA = pThreadContextX64->Rsp+wRegOffsInStack*8;
+                    else
+                        dwRegValRVA = *pFPReg + wRegOffsInStack*8;
+    
+                    // Read register
+                    DWORD64 dwRegVal = 0;
+                    bRead = m_pMdmpReader->ReadMemory(dwRegValRVA, &dwRegVal, 8, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=8)
+                        return FALSE;
+    
+                    *pReg -= dwRegVal;
                 }
-                else
+                break;
+            case UWOP_SAVE_NONVOL_FAR: // Save a nonvolatile integer register on the stack with a long offset, using a MOV instead of a PUSH.
                 {
+                    // Save a nonvolatile integer register on the stack with a long offset,
+                    // using a MOV instead of a PUSH. This is primarily used for shrink-wrapping,
+                    // where a nonvolatile register is saved to the stack in a position that was
+                    // previously allocated. The operation info is the number of the register. The
+                    // unscaled stack offset is recorded in the next two unwind operation code slots,
+                    // as described in the note above.
+    
+                    // Determine what register to read
+                    PDWORD64 pReg = GetGPRegByIndex(UnwindCode.OpInfo);
+    
                     // Read the next two slots
                     i+=2;
-                    DWORD dwFixedStackAllocSize = 0;
-                    bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &dwFixedStackAllocSize, sizeof(DWORD), &dwBytesRead);
+                    DWORD dwRegOffsInStack = 0;
+                    bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &dwRegOffsInStack, sizeof(DWORD), &dwBytesRead);
                     if(!bRead || dwBytesRead!=sizeof(DWORD))
                         return FALSE;
-
-                    pThreadContextX64->Rsp -= dwFixedStackAllocSize;
+    
+                    // Calculate offset of the saved register's value in stack
+                    DWORD64 dwRegValRVA = 0;
+                    if(UnwindInfo.FrameRegister==0)
+                        dwRegValRVA = pThreadContextX64->Rsp+dwRegOffsInStack;
+                    else
+                        dwRegValRVA = *pFPReg + dwRegOffsInStack;
+    
+                    // Read register
+                    DWORD64 dwRegVal = 0;
+                    bRead = m_pMdmpReader->ReadMemory(dwRegValRVA, &dwRegVal, 8, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=8)
+                        return FALSE;
+    
+                    *pReg -= dwRegVal;
                 }
-            }
-            break;
-        case UWOP_ALLOC_SMALL: // Allocate a small-sized area on the stack.
-            {
-                // The size of the allocation is the operation info field * 8 + 8,
-                // allowing allocations from 8 to 128 bytes.
-
-                pThreadContextX64->Rsp -= UnwindCode.OpInfo*8+8;
-            }
-            break;
-        case UWOP_SET_FPREG: // Establish the frame pointer register
-            {
-                // The offset is equal to the Frame Register offset (scaled) field
-                // in the UNWIND_INFO * 16, allowing offsets from 0 to 240. The use
-                // of an offset permits establishing a frame pointer that points to
-                // the middle of the fixed stack allocation, helping code density by
-                // allowing more accesses to use short instruction forms. Note that
-                // the operation info field is reserved and should not be used.
-
-                // Determine what register is the frame register
-                PDWORD64 pReg = GetGPRegByIndex(UnwindInfo.FrameRegister);
-
-                pReg -= UnwindInfo.FrameOffset*16;
-            }
-            break;
-        case UWOP_SAVE_NONVOL: // Save a nonvolatile integer register on the stack using a MOV instead of a PUSH
-            {
-                // This is primarily used for shrink-wrapping, where a nonvolatile
-                // register is saved to the stack in a position that was previously allocated.
-                // The operation info is the number of the register. The scaled-by-8 stack offset
-                // is recorded in the next unwind operation code slot, as described in the note above.
-
-                // Determine what register to read
-                PDWORD64 pReg = GetGPRegByIndex(UnwindCode.OpInfo);
-
-                // Read the next slot
-                i++;
-                WORD wRegOffsInStack = 0;
-                bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &wRegOffsInStack, sizeof(WORD), &dwBytesRead);
-                if(!bRead || dwBytesRead!=sizeof(WORD))
-                    return FALSE;
-
-                // Calculate offset of the saved register's value in stack
-                DWORD64 dwRegValRVA = 0;
-                if(UnwindInfo.FrameRegister==0)
-                    dwRegValRVA = pThreadContextX64->Rsp+wRegOffsInStack*8;
-                else
-                    dwRegValRVA = *pFPReg + wRegOffsInStack*8;
-
-                // Read register
-                DWORD64 dwRegVal = 0;
-                bRead = m_pMdmpReader->ReadMemory(dwRegValRVA, &dwRegVal, 8, &dwBytesRead);
-                if(!bRead || dwBytesRead!=8)
-                    return FALSE;
-
-                *pReg -= dwRegVal;
-            }
-            break;
-        case UWOP_SAVE_NONVOL_FAR: // Save a nonvolatile integer register on the stack with a long offset, using a MOV instead of a PUSH.
-            {
-                // Save a nonvolatile integer register on the stack with a long offset,
-                // using a MOV instead of a PUSH. This is primarily used for shrink-wrapping,
-                // where a nonvolatile register is saved to the stack in a position that was
-                // previously allocated. The operation info is the number of the register. The
-                // unscaled stack offset is recorded in the next two unwind operation code slots,
-                // as described in the note above.
-
-                // Determine what register to read
-                PDWORD64 pReg = GetGPRegByIndex(UnwindCode.OpInfo);
-
-                // Read the next two slots
-                i+=2;
-                DWORD dwRegOffsInStack = 0;
-                bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &dwRegOffsInStack, sizeof(DWORD), &dwBytesRead);
-                if(!bRead || dwBytesRead!=sizeof(DWORD))
-                    return FALSE;
-
-                // Calculate offset of the saved register's value in stack
-                DWORD64 dwRegValRVA = 0;
-                if(UnwindInfo.FrameRegister==0)
-                    dwRegValRVA = pThreadContextX64->Rsp+dwRegOffsInStack;
-                else
-                    dwRegValRVA = *pFPReg + dwRegOffsInStack;
-
-                // Read register
-                DWORD64 dwRegVal = 0;
-                bRead = m_pMdmpReader->ReadMemory(dwRegValRVA, &dwRegVal, 8, &dwBytesRead);
-                if(!bRead || dwBytesRead!=8)
-                    return FALSE;
-
-                *pReg -= dwRegVal;
-            }
-            break;
-        case UWOP_SAVE_XMM128: // Save all 128 bits of a nonvolatile XMM register on the stack.
-            {
-                // The operation info is the number of the register. The scaled-by-16 stack offset
-                // is recorded in the next slot.
-
-                // Determine what XMM register to read
-                LPBYTE pReg = GetXMMRegByIndex(UnwindCode.OpInfo);
-
-                // Read the next unwind code slot
-                i++;
-                WORD wOffsInFixedStackAlloc = 0;
-                bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &wOffsInFixedStackAlloc, sizeof(WORD), &dwBytesRead);
-                if(!bRead || dwBytesRead!=sizeof(WORD))
-                    return FALSE;
-
-                // Calculate offset of the saved register's value in stack
-                DWORD64 dwRegValRVA = 0;
-                if(UnwindInfo.FrameRegister==0)
-                    dwRegValRVA = pThreadContextX64->Rsp + wOffsInFixedStackAlloc*16;
-                else
-                    dwRegValRVA = *pFPReg + wOffsInFixedStackAlloc*16;
-
-                // Read register
-                BYTE XmmReg[16];
-                bRead = m_pMdmpReader->ReadMemory(dwRegValRVA, &XmmReg, 16, &dwBytesRead);
-                if(!bRead || dwBytesRead!=16)
-                    return FALSE;
-
-                // Save reg value to thread context
-                memcpy(pReg, &XmmReg, 16);
-
-            }
-            break;
-        case UWOP_SAVE_XMM128_FAR: // Save all 128 bits of a nonvolatile XMM register on the stack with a long offset.
-            {
-                // The operation info is the number of the register. The unscaled stack offset is
-                // recorded in the next two slots.
-
-                // Determine what XMM register to read
-                LPBYTE pReg = GetXMMRegByIndex(UnwindCode.OpInfo);
-
-                // Read the next two slots
-                i+=2;
-                DWORD dwOffsInFixedStackAlloc = 0;
-                bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &dwOffsInFixedStackAlloc, sizeof(DWORD), &dwBytesRead);
-                if(!bRead || dwBytesRead!=sizeof(DWORD))
-                    return FALSE;
-
-                // Calculate offset of the saved register's value in stack
-                DWORD64 dwRegValRVA = 0;
-                if(UnwindInfo.FrameRegister==0)
-                    dwRegValRVA = pThreadContextX64->Rsp + dwOffsInFixedStackAlloc;
-                else
-                    dwRegValRVA = *pFPReg + dwOffsInFixedStackAlloc;
-
-                // Read register
-                BYTE XmmReg[16];
-                bRead = m_pMdmpReader->ReadMemory(pThreadContextX64->Rsp+dwOffsInFixedStackAlloc, &XmmReg, 16, &dwBytesRead);
-                if(!bRead || dwBytesRead!=16)
-                    return FALSE;
-
-                // Save reg value to thread context
-                memcpy(pReg, &XmmReg, 16);
-            }
-            break;
-        case UWOP_PUSH_MACHFRAME: // Push a machine frame.
-            {
-                // This is used to record the effect of a hardware interrupt or exception.
-
-                DWORD64 dwVal = 0;
-                DWORD dwOffsInStack = 0;
-
-                if(UnwindCode.OpInfo==1)
+                break;
+            case UWOP_SAVE_XMM128: // Save all 128 bits of a nonvolatile XMM register on the stack.
                 {
-                    // Read Error Code
+                    // The operation info is the number of the register. The scaled-by-16 stack offset
+                    // is recorded in the next slot.
+    
+                    // Determine what XMM register to read
+                    LPBYTE pReg = GetXMMRegByIndex(UnwindCode.OpInfo);
+    
+                    // Read the next unwind code slot
+                    i++;
+                    WORD wOffsInFixedStackAlloc = 0;
+                    bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &wOffsInFixedStackAlloc, sizeof(WORD), &dwBytesRead);
+                    if(!bRead || dwBytesRead!=sizeof(WORD))
+                        return FALSE;
+    
+                    // Calculate offset of the saved register's value in stack
+                    DWORD64 dwRegValRVA = 0;
+                    if(UnwindInfo.FrameRegister==0)
+                        dwRegValRVA = pThreadContextX64->Rsp + wOffsInFixedStackAlloc*16;
+                    else
+                        dwRegValRVA = *pFPReg + wOffsInFixedStackAlloc*16;
+    
+                    // Read register
+                    BYTE XmmReg[16];
+                    bRead = m_pMdmpReader->ReadMemory(dwRegValRVA, &XmmReg, 16, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=16)
+                        return FALSE;
+    
+                    // Save reg value to thread context
+                    memcpy(pReg, &XmmReg, 16);
+    
+                }
+                break;
+            case UWOP_SAVE_XMM128_FAR: // Save all 128 bits of a nonvolatile XMM register on the stack with a long offset.
+                {
+                    // The operation info is the number of the register. The unscaled stack offset is
+                    // recorded in the next two slots.
+    
+                    // Determine what XMM register to read
+                    LPBYTE pReg = GetXMMRegByIndex(UnwindCode.OpInfo);
+    
+                    // Read the next two slots
+                    i+=2;
+                    DWORD dwOffsInFixedStackAlloc = 0;
+                    bRead = pPeReader->ReadImageMemory(dwUnwindCodeRVA+4, &dwOffsInFixedStackAlloc, sizeof(DWORD), &dwBytesRead);
+                    if(!bRead || dwBytesRead!=sizeof(DWORD))
+                        return FALSE;
+    
+                    // Calculate offset of the saved register's value in stack
+                    DWORD64 dwRegValRVA = 0;
+                    if(UnwindInfo.FrameRegister==0)
+                        dwRegValRVA = pThreadContextX64->Rsp + dwOffsInFixedStackAlloc;
+                    else
+                        dwRegValRVA = *pFPReg + dwOffsInFixedStackAlloc;
+    
+                    // Read register
+                    BYTE XmmReg[16];
+                    bRead = m_pMdmpReader->ReadMemory(pThreadContextX64->Rsp+dwOffsInFixedStackAlloc, &XmmReg, 16, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=16)
+                        return FALSE;
+    
+                    // Save reg value to thread context
+                    memcpy(pReg, &XmmReg, 16);
+                }
+                break;
+            case UWOP_PUSH_MACHFRAME: // Push a machine frame.
+                {
+                    // This is used to record the effect of a hardware interrupt or exception.
+    
+                    DWORD64 dwVal = 0;
+                    DWORD dwOffsInStack = 0;
+    
+                    if(UnwindCode.OpInfo==1)
+                    {
+                        // Read Error Code
+                        dwOffsInStack += 8;
+                    }
+    
+                    // Read RIP
+                    bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=8)
+                        return FALSE;
+                    pThreadContextX64->Rip = dwVal;
+                    dwOffsInStack += 8;
+    
+                    // Read CS
+                    bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=8)
+                        return FALSE;
+                    pThreadContextX64->SegCs = (WORD)dwVal;
+                    dwOffsInStack += 8;
+    
+                    // Read EFLAGS
+                    bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=8)
+                        return FALSE;
+                    pThreadContextX64->EFlags = (DWORD)dwVal;
+                    dwOffsInStack += 8;
+    
+                    // Read old RSP
+                    bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=8)
+                        return FALSE;
+                    pThreadContextX64->Rsp = dwVal;
+                    dwOffsInStack += 8;
+    
+                    // Read SS
+                    bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
+                    if(!bRead || dwBytesRead!=8)
+                        return FALSE;
+                    pThreadContextX64->SegSs = (WORD)dwVal;
                     dwOffsInStack += 8;
                 }
-
-                // Read RIP
-                bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
-                if(!bRead || dwBytesRead!=8)
-                    return FALSE;
-                pThreadContextX64->Rip = dwVal;
-                dwOffsInStack += 8;
-
-                // Read CS
-                bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
-                if(!bRead || dwBytesRead!=8)
-                    return FALSE;
-                pThreadContextX64->SegCs = (WORD)dwVal;
-                dwOffsInStack += 8;
-
-                // Read EFLAGS
-                bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
-                if(!bRead || dwBytesRead!=8)
-                    return FALSE;
-                pThreadContextX64->EFlags = (DWORD)dwVal;
-                dwOffsInStack += 8;
-
-                // Read old RSP
-                bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
-                if(!bRead || dwBytesRead!=8)
-                    return FALSE;
-                pThreadContextX64->Rsp = dwVal;
-                dwOffsInStack += 8;
-
-                // Read SS
-                bRead = m_pMdmpReader->ReadMemory(m_StackFrame.m_dwAddrStack+dwOffsInStack, &dwVal, 8, &dwBytesRead);
-                if(!bRead || dwBytesRead!=8)
-                    return FALSE;
-                pThreadContextX64->SegSs = (WORD)dwVal;
-                dwOffsInStack += 8;
+                break;
             }
-            break;
         }
 
+        if((UnwindInfo.Flags&UNW_FLAG_CHAININFO)!=0)
+        {
+            // Chained unwind info
+    
+            DWORD dwRFuncRVA = dwUnwindInfoRVA+4+UnwindInfo.CountOfCodes*sizeof(UNWIND_CODE);
+    
+            RUNTIME_FUNCTION RFunc;
+    
+            // Get runtime function record
+            DWORD dwBytesRead = 0;
+            BOOL bRead = pPeReader->ReadImageMemory(dwRFuncRVA, &RFunc, sizeof(RUNTIME_FUNCTION), &dwBytesRead);
+            if(!bRead || dwBytesRead!=sizeof(RUNTIME_FUNCTION))
+                return FALSE;
+    
+            pPeReader->GetRvaByVA(RFunc.UnwindData, dwUnwindInfoRVA);
+            dwOffsInFunc = (DWORD)dwAddr - RFunc.BeginAddress;
+          //bRead = pPeReader->ReadImageMemory(dwUnwindInfoRVA, &UnwindInfo, sizeof(UNWIND_INFO), &dwBytesRead);
+          //if(!bRead || dwBytesRead!=sizeof(UNWIND_INFO))
+          //    return FALSE;        
+            continue;
+        }
+    
+        break;
     }
-
     return TRUE;
 }
 

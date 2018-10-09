@@ -106,7 +106,7 @@ private:
     LPBYTE GetXMMRegByIndex(UINT uRegIndex);
 
     //! Undoes effects of prolog.
-    BOOL UndoAMD64Prolog(CPeReader* pPeReader, DWORD dwUnwindInfoRVA, DWORD dwOffsInFunc);
+    BOOL UndoAMD64Prolog(CPeReader* pPeReader, DWORD64 dwAddr, DWORD dwUnwindInfoRVA, DWORD dwOffsInFunc);
         
     CMiniDumpReader* m_pMdmpReader; //!< Pointer to minidump reader
     LPBYTE m_pThreadContext;        //!< Thread context.
