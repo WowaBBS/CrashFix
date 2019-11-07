@@ -1,5 +1,5 @@
 <div class="span-27 last">
-
+<a href="../../../DownloadPdb.php7?crid=<?=$model->id;?>">Download all pdb</a>
 <!-- Grid view -->
 <?php $this->widget('zii.widgets.grid.CGridView', array(
       'dataProvider'=>$model->searchModules(),

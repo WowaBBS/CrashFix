@@ -1,0 +1,58 @@
+<?
+  ini_set('display_errors', 0);
+//for($F=__FILE__; $F;) if(@include($F=DirName($F)).'/Using.php') break;
+  include 'WLib\Using.php';
+  $crid=$_GET['crid']?? 538;
+//echo 'Hello '.$crid;
+  $LogFile=$HTTP_SERVER_VARS['PHP_SELF']?? $argv[0]?? __FILE__;
+  $LogFile=PathInfo($LogFile);
+  $LogFile=$LogFile['dirname'].'/'.$LogFile['filename'].'.log';
+  $Loader->GetLogger()->Add($LogFile);
+  if(IsSet($_GET['crid']))
+    $Loader->GetLogger()->Get('Console')->Disable();
+  
+  $Loader->Log('Log', 'crid=', $crid);
+  
+  $link = mysqli_connect('localhost', 'root', '', 'ExoplanetFC_CrashFix');
+  $query= 
+//select * from tbl_fileitem where crashreport_id =538
+//select * from tbl_customprop where crashreport_id =538
+//select * from tbl_thread where crashreport_id =538
+//select * from tbl_module where crashreport_id =538
+//select * from tbl_debuginfo where id in (select loaded_debug_info_id from tbl_module where crashreport_id =538)
+//select * from tbl_debuginfo where id in (select loaded_debug_info_id from tbl_module where crashreport_id =538) and status=3
+  "select concat('protected/data/debugInfo/', filename, '/', guid, '/', filename) from tbl_debuginfo where id in (select loaded_debug_info_id from tbl_module where crashreport_id =538) and status=3";
+//select * from tbl_bug_crashreport where crashreport_id =538
+
+  
+  $ZipBuilder=$Loader->Create_Object('/Archive/Zip/Builder');
+  if($result=mysqli_query($link, $query))
+  while($row=mysqli_fetch_row($result))
+    if(Is_File($File=$row[0]))
+    {
+      $Loader->Log('Log', '  File: ', $File);
+      $ZipBuilder->AddFile($File);
+    }
+  mysqli_close($link);
+  If($ZipBuilder->Files)
+  {
+    if(IsSet($_GET['crid']))
+    {
+      header('Pragma: public');
+      header('Expires: 0');
+      header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+      header('Cache-Control: public');
+      header('Content-Description: File Transfer');
+      header('Content-type: application/octet-stream');
+      header('Content-Disposition: attachment; filename="PdbList'.$crid.'.zip"');
+      header('Content-Transfer-Encoding: binary');
+    //header('Content-Length: '.filesize($filepath.$filename));    
+
+      $ZipBuilder->Write();
+    }
+    else
+      $ZipBuilder->Write('test.zip');
+  }
+  else
+    echo 'No files';
+?>
