@@ -21,7 +21,7 @@
 //select * from tbl_module where crashreport_id =538
 //select * from tbl_debuginfo where id in (select loaded_debug_info_id from tbl_module where crashreport_id =538)
 //select * from tbl_debuginfo where id in (select loaded_debug_info_id from tbl_module where crashreport_id =538) and status=3
-  "select concat('protected/data/debugInfo/', filename, '/', guid, '/', filename) from tbl_debuginfo where id in (select loaded_debug_info_id from tbl_module where crashreport_id =538) and status=3";
+  "select concat('protected/data/debugInfo/', filename, '/', guid, '/', filename) from tbl_debuginfo where id in (select loaded_debug_info_id from tbl_module where crashreport_id =".((Int)$crid).") and status=3";
 //select * from tbl_bug_crashreport where crashreport_id =538
 
   
