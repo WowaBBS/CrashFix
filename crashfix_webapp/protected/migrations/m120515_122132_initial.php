@@ -581,7 +581,7 @@ class m120515_122132_initial extends CDbMigration
 					'sym_load_status'=>'INTEGER NOT NULL',
 					'loaded_debug_info_id'=>'INTEGER',
 					'file_version'=>'VARCHAR(32) NOT NULL',
-					'timestamp'=>'INTEGER',
+					'timestamp'=>'INTEGER UNSIGNED',
 				)
 			);
 		
@@ -797,4 +797,3 @@ class m120515_122132_initial extends CDbMigration
 	}
 	*/
 }
-
