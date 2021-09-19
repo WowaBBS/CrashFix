@@ -149,6 +149,14 @@ int RemoveFile(std::wstring sFilePath)
 
 bool copy_file(std::wstring& sExistingFileName, std::wstring& sNewFileName, bool bFailIfExists)
 {
+   std::wstring md5To;
+   if(CalcFileMD5Hash(sNewFileName, md5To)==0)
+   {
+     std::wstring md5From;
+     if(CalcFileMD5Hash(sExistingFileName, md5From)==0)
+       return md5To==md5From && bFailIfExists;
+     return false;
+   }
 #ifdef _WIN32
     BOOL bCopy = CopyFileW(sExistingFileName.c_str(), sNewFileName.c_str(), bFailIfExists);
     return bCopy!=FALSE;
@@ -439,5 +447,3 @@ void Sleep(int msec)
 }
 
 #endif //_WIN32
-
-

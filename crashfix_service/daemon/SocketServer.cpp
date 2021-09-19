@@ -913,7 +913,8 @@ int CSocketServer::GetAssyncCommandInfo(std::string& sErrorMsg, const char* szCo
 	if(!bFound)
 	{
 		nStatus = 1;
-		sErrorMsg = "Such a command ID not found.";
+		sErrorMsg = std::string("Such a command ID not found.")+szCommandId;
+	//sErrorMsg = std::string("Such a command ID not found: ")+szCommandId;
 		goto exit;
 	}
 
